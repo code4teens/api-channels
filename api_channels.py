@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request
+from sqlalchemy import exc
 
 from database import db_session
 from models import Channel, Cohort, User
@@ -78,3 +79,101 @@ def create_channel():
         }
 
         return data, 400
+
+
+@api_channels.route('/channels/<int:id>')
+def get_channel(id):
+    channel = Channel.query.filter_by(id=id).one_or_none()
+
+    if channel is not None:
+        data = ChannelSchema().dump(channel)
+
+        return data, 200
+    else:
+        data = {
+            'title': 'Not Found',
+            'status': 404,
+            'detail': f'Channel {id} not found'
+        }
+
+        return data, 404
+
+
+@api_channels.route('/channels/<int:id>', methods=['PUT'])
+def update_channel(id):
+    keys = ['name', 'user_id', 'cohort_id']
+
+    if all(key in keys for key in request.json):
+        existing_channel = Channel.query.filter_by(id=id).one_or_none()
+
+        if existing_channel is not None:
+            channel_schema = ChannelSchema()
+
+            try:
+                channel = channel_schema.load(request.json)
+            except Exception as _:
+                data = {
+                    'title': 'Bad Request',
+                    'status': 400,
+                    'detail': 'Some values failed validation'
+                }
+
+                return data, 400
+            else:
+                channel.id = existing_channel.id
+                db_session.merge(channel)
+
+                try:
+                    db_session.commit()
+                except exc.IntegrityError as _:
+                    data = {
+                        'title': 'Bad Request',
+                        'status': 400,
+                        'detail': 'Some values failed validation'
+                    }
+
+                    return data, 400
+                else:
+                    data = channel_schema.dump(existing_channel)
+
+                    return data, 200
+        else:
+            data = {
+                'title': 'Not Found',
+                'status': 404,
+                'detail': f'Channel {id} not found'
+            }
+
+            return data, 404
+    else:
+        data = {
+            'title': 'Bad Request',
+            'status': 400,
+            'detail': 'Missing some keys or contains extra keys'
+        }
+
+        return data, 400
+
+
+@api_channels.route('/channels/<int:id>', methods=['DELETE'])
+def delete_channel(id):
+    channel = Channel.query.filter_by(id=id).one_or_none()
+
+    if channel is not None:
+        db_session.delete(channel)
+        db_session.commit()
+        data = {
+            'title': 'OK',
+            'status': 200,
+            'detail': f'Channel {id} deleted'
+        }
+
+        return data, 200
+    else:
+        data = {
+            'title': 'Not Found',
+            'status': 404,
+            'detail': f'Channel {id} not found'
+        }
+
+        return data, 404
